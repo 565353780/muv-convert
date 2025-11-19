@@ -31,6 +31,18 @@ class StepLoader(object):
         return shape_data_list
 
     def renderCADData(self, shape_data: dict) -> bool:
+        """
+        可视化单个形状数据
+        
+        Args:
+            shape_data: 形状数据字典，包含 'type' 和 'data' 字段
+                       data中包含 'face_pnts' (N,32,32,4或3)
+                                'edge_pnts' (M,32,3)
+                                'edge_corner_pnts' (M,2,3)
+
+        Returns:
+            bool: 是否成功可视化
+        """
         face_pts = shape_data['data']['face_pnts']
         edge_pts = shape_data['data']['edge_pnts']
         edge_corner_pts = shape_data['data']['edge_corner_pnts']

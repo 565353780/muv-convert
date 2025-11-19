@@ -7,7 +7,7 @@ def random_color():
 
 
 def vis_faces_edges(
-    face_pnts,           # (N, 32, 32, 3)
+    face_pnts,           # (N, 32, 32, 3) or (N, 32, 32, 4)
     edge_pnts,           # (M, 32, 3)
     edge_corner_pnts,    # (M, 2, 3)
 ):
@@ -16,13 +16,30 @@ def vis_faces_edges(
     N = face_pnts.shape[0]
     M = edge_pnts.shape[0]
 
-    face_pnts = face_pnts[..., :3]
+    # 检查是否包含mask维度
+    has_mask = face_pnts.shape[-1] == 4
 
     # ---------------------
     # 1) visualize faces
     # ---------------------
     for i in range(N):
-        pts = face_pnts[i].reshape(-1, 3)
+        if has_mask:
+            # 提取坐标和mask
+            coords = face_pnts[i, :, :, :3]  # (32, 32, 3)
+            mask = face_pnts[i, :, :, 3]     # (32, 32)
+
+            # 只选择mask为1的点
+            mask_flat = mask.reshape(-1)
+            coords_flat = coords.reshape(-1, 3)
+            valid_indices = mask_flat == 1
+            pts = coords_flat[valid_indices]
+            
+            # 如果没有有效点，跳过这个face
+            if pts.shape[0] == 0:
+                continue
+        else:
+            # 没有mask，使用所有点
+            pts = face_pnts[i].reshape(-1, 3)
 
         # create point cloud for the face
         pc = o3d.geometry.PointCloud()
@@ -109,7 +126,8 @@ def vis_faces_edges_list(shape_data_list):
             print(f'[WARN] Shape {shape_idx} ({shape_type}) has no geometry data, skipping')
             continue
 
-        face_pnts = face_pnts[..., :3]
+        # 检查是否包含mask维度
+        has_mask = face_pnts.shape[-1] == 4 if face_pnts.size > 0 else False
 
         N = face_pnts.shape[0] if face_pnts.size > 0 else 0
         M = edge_pnts.shape[0] if edge_pnts.size > 0 else 0
@@ -122,7 +140,23 @@ def vis_faces_edges_list(shape_data_list):
         # 1) visualize faces
         # ---------------------
         for i in range(N):
-            pts = face_pnts[i].reshape(-1, 3)
+            if has_mask:
+                # 提取坐标和mask
+                coords = face_pnts[i, :, :, :3]  # (32, 32, 3)
+                mask = face_pnts[i, :, :, 3]     # (32, 32)
+
+                # 只选择mask为1的点
+                mask_flat = mask.reshape(-1)
+                coords_flat = coords.reshape(-1, 3)
+                valid_indices = mask_flat == 1
+                pts = coords_flat[valid_indices]
+
+                # 如果没有有效点，跳过这个face
+                if pts.shape[0] == 0:
+                    continue
+            else:
+                # 没有mask，使用所有点
+                pts = face_pnts[i].reshape(-1, 3)
 
             # create point cloud for the face
             pc = o3d.geometry.PointCloud()
