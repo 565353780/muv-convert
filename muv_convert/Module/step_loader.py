@@ -12,7 +12,7 @@ class StepLoader(object):
 
     def loadStepFile(self, step_file_path: str) -> Union[list, None]:
         if not os.path.exists(step_file_path):
-            print('[ERROR][MUVConvertor::loadStepFile]')
+            print('[ERROR][StepLoader::loadStepFile]')
             print('\t step file not exist!')
             print('\t step_file_path:', step_file_path)
             return None
@@ -20,7 +20,7 @@ class StepLoader(object):
         cad_solid_list = load_step(step_file_path)
 
         if len(cad_solid_list) == 0:
-            print('[WARN][MUVConvertor::loadStepFile]')
+            print('[WARN][StepLoader::loadStepFile]')
             print('\t cad solid not found!')
             print('\t step_file_path:', step_file_path)
             return None
