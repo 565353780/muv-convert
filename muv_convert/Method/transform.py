@@ -15,7 +15,7 @@ def normalize(surf_pnts, edge_pnts, corner_pnts):
 
     surfs_wcs, edges_wcs, surfs_ncs, edges_ncs = [],[],[],[]
 
-    # Normalize corner 
+    # Normalize corner
     corner_wcs = (corner_pnts - global_offset[np.newaxis,:]) / (global_scale * 0.5)
 
     # Normalize surface
