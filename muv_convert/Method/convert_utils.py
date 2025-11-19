@@ -1,7 +1,5 @@
-import os 
-import json
-import random
 import numpy as np
+from typing import Union
 from occwl.solid import Solid
 from occwl.shell import Shell
 from occwl.compound import Compound
@@ -37,152 +35,6 @@ def real2bit(data, n_bits=8, min_range=-1, max_range=1):
     return data_quantize.astype(int) 
 
 
-def load_abc_pkl(root_dir, use_deepcad):
-    """
-    Recursively searches through a given parent directory and its subdirectories
-    to find the paths of all ABC .pkl files.
-
-    Args:
-    - root_dir (str): Path to the root directory where the search begins.
-    - use_deepcad (bool): Process deepcad or not
-
-    Returns:
-    - train [str]: A list containing the paths to all .pkl train data
-    - val [str]: A list containing the paths to all .pkl validation data
-    - test [str]: A list containing the paths to all .pkl test data
-    """
-    # Load DeepCAD UID 
-    if use_deepcad:
-        with open('train_val_test_split.json', 'r') as json_file:
-            deepcad_data = json.load(json_file)
-        train_uid = set([uid.split('/')[1] for uid in deepcad_data['train']])
-        val_uid = set([uid.split('/')[1] for uid in deepcad_data['validation']])
-        test_uid = set([uid.split('/')[1] for uid in deepcad_data['test']])
-
-    # Load ABC UID
-    else:
-        full_uids = []
-        dirs = [f'{root_dir}/{str(i).zfill(4)}' for i in range(100)]
-        for folder in dirs:
-            files = os.listdir(folder)
-            full_uids += files 
-        # 90-5-5 random split, same as deepcad
-        random.shuffle(full_uids) # randomly shuffle data 
-        train_uid = full_uids[0:int(len(full_uids)*0.9)]    
-        val_uid = full_uids[int(len(full_uids)*0.9):int(len(full_uids)*0.95)]  
-        test_uid = full_uids[int(len(full_uids)*0.95):]
-        train_uid = set([uid.split('.')[0] for uid in train_uid])
-        val_uid = set([uid.split('.')[0] for uid in val_uid])
-        test_uid = set([uid.split('.')[0] for uid in test_uid])
-
-    train = []
-    val = []
-    test = []
-    dirs = [f'{root_dir}/{str(i).zfill(4)}' for i in range(100)]
-    for folder in dirs:
-        files = os.listdir(folder)
-        for file in files:
-            key_id = file.split('.')[0]
-            if key_id in train_uid:
-                train.append(file)
-            elif key_id in val_uid:
-                val.append(file)
-            elif key_id in test_uid:
-                test.append(file)
-            else:
-                print('unknown uid...')
-                assert False
-    return train, val, test
-
-
-def load_furniture_pkl(root_dir):
-    """
-    Recursively searches through a given parent directory and its subdirectories
-    to find the paths of all furniture .pkl files.
-
-    Args:
-    - root_dir (str): Path to the root directory where the search begins.
-
-    Returns:
-    - train [str]: A list containing the paths to all .pkl train data
-    - val [str]: A list containing the paths to all .pkl validation data
-    - test [str]: A list containing the paths to all .pkl test data
-    """
-    full_uids = []
-    for root, dirs, files in os.walk(root_dir):
-        for filename in files:
-            # Check if the file ends with the specified prefix
-            if filename.endswith('.pkl'):
-                file_path = os.path.join(root, filename)
-                full_uids.append(file_path)
-                
-    # 90-5-5 random split, similary to deepcad
-    random.shuffle(full_uids) # randomly shuffle data 
-    train_uid = full_uids[0:int(len(full_uids)*0.9)]    
-    val_uid = full_uids[int(len(full_uids)*0.9):int(len(full_uids)*0.95)]  
-    test_uid = full_uids[int(len(full_uids)*0.95):]
-    
-    train_uid = ['/'.join(uid.split('/')[-2:]) for uid in train_uid]
-    val_uid = ['/'.join(uid.split('/')[-2:]) for uid in val_uid]
-    test_uid = ['/'.join(uid.split('/')[-2:]) for uid in test_uid]
-
-    return train_uid, val_uid, test_uid
-
-
-def load_abc_step(root_dir, use_deepcad):
-    """
-    Recursively searches through a given parent directory and its subdirectories
-    to find the paths of all ABC STEP files.
-
-    Args:
-    - root_dir (str): Path to the root directory where the search begins.
-    - use_deepcad (bool): Process deepcad or not
-
-    Returns:
-    - step_dirs [str]: A list containing the paths to all STEP parent directory
-    """
-    # Load DeepCAD UID 
-    if use_deepcad:
-        with open('train_val_test_split.json', 'r') as json_file:
-            deepcad_data = json.load(json_file)
-        deepcad_data = deepcad_data['train'] + deepcad_data['validation'] + deepcad_data['test']
-        deepcad_uid = set([uid.split('/')[1] for uid in deepcad_data])
-
-    # Create STEP file folder path (based on the default ABC STEP format)
-    dirs_nested = [[f'{root_dir}/abc_{str(i).zfill(4)}_step_v00']*10000 for i in range(100)]
-    dirs = [item for sublist in dirs_nested for item in sublist]
-    subdirs = [f'{str(i).zfill(8)}' for i in range(1000000)]
-    
-    if use_deepcad:
-        step_dirs = [root + '/' + sub for root, sub in zip(dirs, subdirs) if sub in deepcad_uid]
-    else:
-        step_dirs = [root + '/' + sub for root, sub in zip(dirs, subdirs)]
-
-    return step_dirs
-
-
-def load_furniture_step(root_dir):
-    """
-    Recursively searches through a given parent directory and its subdirectories
-    to find the paths of all Furniture STEP files.
-
-    Args:
-    - root_dir (str): Path to the root directory where the search begins.
-
-    Returns:
-    - data_files [str]: A list containing the paths to all STEP parent directory
-    """
-    data_files = []
-    # Walk through the directory tree starting from the root folder
-    for root, dirs, files in os.walk(root_dir):
-        for filename in files:
-            # Check if the file ends with the specified prefix
-            if filename.endswith('.step'):
-                file_path = os.path.join(root, filename)
-                data_files.append(file_path)
-    return data_files
-    
-
 def update_mapping(data_dict):
     """
     Remove unused key index from data dictionary.
@@ -199,7 +51,7 @@ def update_mapping(data_dict):
     return dict_new, mapping
 
 
-def face_edge_adj(shape):
+def face_edge_adj(shape: Union[Shell, Solid, Compound]):
     """
     *** COPY AND MODIFIED FROM THE ORIGINAL OCCWL SOURCE CODE ***
     Extract face/edge geometry and create a face-edge adjacency 
@@ -207,7 +59,7 @@ def face_edge_adj(shape):
 
     Args:
     - shape (Shell, Solid, or Compound): Shape
-        
+
     Returns:
     - face_dict: Dictionary of occwl faces, with face ID as the key
     - edge_dict: Dictionary of occwl edges, with edge ID as the key
@@ -215,7 +67,7 @@ def face_edge_adj(shape):
     """
     assert isinstance(shape, (Shell, Solid, Compound))
     mapper = EntityMapper(shape)
-   
+
     ### Faces ###
     face_dict = {}
     for face in shape.faces():
@@ -227,7 +79,7 @@ def face_edge_adj(shape):
     edge_dict = {}
     for edge in shape.edges():
         if not edge.has_curve():
-            continue    
+            continue
 
         connected_faces = list(shape.faces_from_edge(edge))
         if len(connected_faces) == 2 and not edge.seam(connected_faces[0]) and not edge.seam(connected_faces[1]):
@@ -249,7 +101,7 @@ def face_edge_adj(shape):
     return face_dict, edge_dict, edgeFace_IncM
 
 
-def extract_primitive(solid):
+def extract_primitive(solid: Solid):
     """
     Extract all primitive information from splitted solid
 
@@ -268,15 +120,15 @@ def extract_primitive(solid):
     # Retrieve face, edge geometry and face-edge adjacency
     face_dict, edge_dict, edgeFace_IncM = face_edge_adj(solid)
 
-    # Skip unused index key, and update the adj 
+    # Skip unused index key, and update the adj
     face_dict, face_map = update_mapping(face_dict)
     edge_dict, edge_map = update_mapping(edge_dict)
     edgeFace_IncM_update = {}
     for key, value in edgeFace_IncM.items():
         new_face_indices = [face_map[x] for x in value]
-        edgeFace_IncM_update[edge_map[key]] = new_face_indices 
+        edgeFace_IncM_update[edge_map[key]] = new_face_indices
     edgeFace_IncM = edgeFace_IncM_update
-    
+
     # Face-edge adj
     num_faces = len(face_dict)
     edgeFace_IncM = np.stack([x for x in edgeFace_IncM.values()])
@@ -284,7 +136,7 @@ def extract_primitive(solid):
     for surf_idx in range(num_faces):
         surf_edges, _ = np.where(edgeFace_IncM == surf_idx)
         faceEdge_IncM.append(surf_edges)
-    
+
     # Sample uv-grid from surface (32x32)
     graph_face_feat = {}
     for face_idx, face_feature in face_dict.items():
@@ -300,7 +152,7 @@ def extract_primitive(solid):
         face_feat = np.concatenate((points, mask), axis=-1)
         graph_face_feat[face_idx] = face_feat
     face_pnts = np.stack([x for x in graph_face_feat.values()])[:,:,:,:3]
-    
+
     # sample u-grid from curve (1x32)
     graph_edge_feat = {}
     graph_corner_feat = {}
@@ -308,7 +160,7 @@ def extract_primitive(solid):
         points = ugrid(edge, method="point", num_u=32)
         graph_edge_feat[edge_idx] = points
         #### edge corners as start/end vertex ###
-        v_start = points[0]  
+        v_start = points[0]
         v_end = points[-1]
         graph_corner_feat[edge_idx] = (v_start, v_end)
     edge_pnts = np.stack([x for x in graph_edge_feat.values()])
