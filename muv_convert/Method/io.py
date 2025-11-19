@@ -146,6 +146,9 @@ def parse_shape(shape_obj: Union[Shell, Solid, Compound], split_closed: bool = T
 
     # Convert to float32 to save space
     data = {
+        'surf_gcs':face_pnts.astype(np.float32),
+        'edge_gcs':edge_pnts.astype(np.float32),
+        'corner_gcs':edge_corner_pnts.astype(np.float32),
         'surf_wcs':surfs_wcs.astype(np.float32),
         'edge_wcs':edges_wcs.astype(np.float32),
         'surf_ncs':surfs_ncs.astype(np.float32),

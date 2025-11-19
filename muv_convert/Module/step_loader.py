@@ -2,7 +2,7 @@ import os
 from typing import Union
 
 from muv_convert.Method.io import load_step_file, extract_all_shapes, parse_shape
-from muv_convert.Method.render import vis_faces_edges
+from muv_convert.Method.render import vis_faces_edges, vis_faces_edges_list
 
 
 class StepLoader(object):
@@ -31,9 +31,9 @@ class StepLoader(object):
         return shape_data_list
 
     def renderCADData(self, shape_data: dict) -> bool:
-        face_pts = shape_data['data']['surf_wcs']
-        edge_pts = shape_data['data']['edge_wcs']
-        edge_corner_pts = shape_data['data']['corner_wcs']
+        face_pts = shape_data['data']['surf_gcs']
+        edge_pts = shape_data['data']['edge_gcs']
+        edge_corner_pts = shape_data['data']['corner_gcs']
 
         vis_faces_edges(
             face_pts,
@@ -41,3 +41,20 @@ class StepLoader(object):
             edge_corner_pts,
         )
         return True
+
+    def renderCADDataList(self, shape_data_list: list) -> bool:
+        """
+        可视化多个形状数据，所有形状在同一个窗口中显示
+
+        Args:
+            shape_data_list: 形状数据列表，每个元素是包含 'type' 和 'data' 的字典
+
+        Returns:
+            bool: 是否成功可视化
+        """
+        if len(shape_data_list) == 0:
+            print('[ERROR][StepLoader::renderCADDataList]')
+            print('\t shape_data_list is empty!')
+            return False
+
+        return vis_faces_edges_list(shape_data_list)
