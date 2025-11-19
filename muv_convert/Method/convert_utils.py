@@ -26,15 +26,6 @@ def get_bbox(point_cloud):
     max_point = np.array([max_x, max_y, max_z])
     return min_point, max_point
 
-
-def real2bit(data, n_bits=8, min_range=-1, max_range=1):
-    """Convert vertices in [-1., 1.] to discrete values in [0, n_bits**2 - 1]."""
-    range_quantize = 2**n_bits - 1
-    data_quantize = (data - min_range) * range_quantize / (max_range - min_range)
-    data_quantize = np.clip(data_quantize, a_min=0, a_max=range_quantize) # clip values
-    return data_quantize.astype(int) 
-
-
 def update_mapping(data_dict):
     """
     移除未使用的索引键并重新映射
@@ -101,7 +92,7 @@ def face_edge_adj(shape: Union[Shell, Solid, Compound]):
 
     return face_dict, edge_dict, edgeFace_IncM
 
-def extract_geometry_data(shape: Union[Shell, Solid, Compound], split_closed=True):
+def extract_geometry_data(shape: Union[Shell, Solid, Compound], split_closed: bool=True) -> dict:
     """
     从shape中提取所有几何数据
 
@@ -206,71 +197,3 @@ def extract_geometry_data(shape: Union[Shell, Solid, Compound], split_closed=Tru
         'num_edges': len(edge_dict)
     }
     return data
-
-
-def extract_primitive(solid: Solid):
-    """
-    Extract all primitive information from splitted solid
-
-    Args:
-    - solid (occwl.Solid): A single b-rep solid in occwl format
-
-    Returns:
-    - face_pnts (N x 32 x 32 x 3): Sampled uv-grid points on the bounded surface region (face)
-    - edge_pnts (M x 32 x 3): Sampled u-grid points on the boundged curve region (edge)
-    - edge_corner_pnts (M x 2 x 3): Start & end vertices per edge
-    - edgeFace_IncM (M x 2): Edge-Face incident matrix, every edge is connect to two face IDs
-    - faceEdge_IncM: A list of N sublist, where each sublist represents the adjacent edge IDs to a face
-    """
-    assert isinstance(solid, Solid)
-
-    # Retrieve face, edge geometry and face-edge adjacency
-    face_dict, edge_dict, edgeFace_IncM = face_edge_adj(solid)
-
-    # Skip unused index key, and update the adj
-    face_dict, face_map = update_mapping(face_dict)
-    edge_dict, edge_map = update_mapping(edge_dict)
-    edgeFace_IncM_update = {}
-    for key, value in edgeFace_IncM.items():
-        new_face_indices = [face_map[x] for x in value]
-        edgeFace_IncM_update[edge_map[key]] = new_face_indices
-    edgeFace_IncM = edgeFace_IncM_update
-
-    # Face-edge adj
-    num_faces = len(face_dict)
-    edgeFace_IncM = np.stack([x for x in edgeFace_IncM.values()])
-    faceEdge_IncM = []
-    for surf_idx in range(num_faces):
-        surf_edges, _ = np.where(edgeFace_IncM == surf_idx)
-        faceEdge_IncM.append(surf_edges)
-
-    # Sample uv-grid from surface (32x32)
-    graph_face_feat = {}
-    for face_idx, face_feature in face_dict.items():
-        _, face = face_feature
-        points = uvgrid(
-            face, method="point", num_u=32, num_v=32
-        )
-        visibility_status = uvgrid(
-            face, method="visibility_status", num_u=32, num_v=32
-        )
-        mask = np.logical_or(visibility_status == 0, visibility_status == 2)  # 0: Inside, 1: Outside, 2: On boundary
-        # Concatenate channel-wise to form face feature tensor
-        face_feat = np.concatenate((points, mask), axis=-1)
-        graph_face_feat[face_idx] = face_feat
-    face_pnts = np.stack([x for x in graph_face_feat.values()])[:,:,:,:3]
-
-    # sample u-grid from curve (1x32)
-    graph_edge_feat = {}
-    graph_corner_feat = {}
-    for edge_idx, edge in edge_dict.items():
-        points = ugrid(edge, method="point", num_u=32)
-        graph_edge_feat[edge_idx] = points
-        #### edge corners as start/end vertex ###
-        v_start = points[0]
-        v_end = points[-1]
-        graph_corner_feat[edge_idx] = (v_start, v_end)
-    edge_pnts = np.stack([x for x in graph_edge_feat.values()])
-    edge_corner_pnts = np.stack([x for x in graph_corner_feat.values()])
-
-    return [face_pnts, edge_pnts, edge_corner_pnts, edgeFace_IncM, faceEdge_IncM]

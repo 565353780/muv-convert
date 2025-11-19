@@ -9,12 +9,11 @@ from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.TopAbs import TopAbs_SOLID, TopAbs_SHELL
 from OCC.Core.TopoDS import topods_Solid, topods_Shell
 
-from muv_convert.Config.constant import MAX_FACE
-from muv_convert.Method.convert_utils import (
-    extract_primitive,
-    get_bbox,
-)
 from muv_convert.Method.transform import normalize
+from muv_convert.Method.convert_utils import (
+    get_bbox,
+    extract_geometry_data,
+)
 
 
 def load_step_file(step_file_path: str):
@@ -87,28 +86,23 @@ def extract_all_shapes(shape):
 
 
 
-def parse_solid(solid: Solid) -> Union[dict, None]:
+def parse_shape(shape_obj: Union[Shell, Solid, Compound], split_closed: bool = True) -> dict:
     """
-    Parse the surface, curve, face, edge, vertex in a CAD solid.
-
     Args:
-    - solid (occwl.solid): A single brep solid in occwl data format.
+        shape: Shell, Solid, 或 Compound对象
+        split_closed: 是否分割闭合面和闭合边
 
     Returns:
-    - data: A dictionary containing all parsed data
+        data: A dictionary containing all parsed data
     """
-    assert isinstance(solid, Solid)
 
-    # Split closed surface and closed curve to halve
-    solid = solid.split_all_closed_faces(num_splits=0)
-    solid = solid.split_all_closed_edges(num_splits=0)
+    data = extract_geometry_data(shape_obj, split_closed)
 
-    if MAX_FACE > 0:
-        if len(list(solid.faces())) > MAX_FACE:
-            return None
-
-    # Extract all B-rep primitives and their adjacency information
-    face_pnts, edge_pnts, edge_corner_pnts, edgeFace_IncM, faceEdge_IncM = extract_primitive(solid)
+    face_pnts = data['face_pnts']
+    edge_pnts = data['edge_pnts']
+    edge_corner_pnts = data['edge_corner_pnts']
+    edgeFace_IncM = data['edgeFace_IncM']
+    faceEdge_IncM = data['faceEdge_IncM']
 
     # Normalize the CAD model
     surfs_wcs, edges_wcs, surfs_ncs, edges_ncs, corner_wcs = normalize(face_pnts, edge_pnts, edge_corner_pnts)
