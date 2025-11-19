@@ -1,6 +1,13 @@
 import numpy as np
 from typing import Union
 from occwl.solid import Solid
+from occwl.shell import Shell
+from occwl.compound import Compound
+from OCC.Core.TopExp import TopExp_Explorer
+from OCC.Core.IFSelect import IFSelect_RetDone
+from OCC.Core.STEPControl import STEPControl_Reader
+from OCC.Core.TopAbs import TopAbs_SOLID, TopAbs_SHELL
+from OCC.Core.TopoDS import topods_Solid, topods_Shell
 
 from muv_convert.Config.constant import MAX_FACE
 from muv_convert.Method.convert_utils import (
@@ -8,6 +15,76 @@ from muv_convert.Method.convert_utils import (
     get_bbox,
 )
 from muv_convert.Method.transform import normalize
+
+
+def load_step_file(step_file_path: str):
+    """
+    使用pythonocc-core读取STEP文件，返回所有形状
+
+    Args:
+        step_file_path: STEP文件路径
+
+    Returns:
+        shapes: 所有形状的列表
+    """
+    step_reader = STEPControl_Reader()
+    status = step_reader.ReadFile(step_file_path)
+
+    if status != IFSelect_RetDone:
+        print('[ERROR][io::loadStepFile]')
+        print(f"\t Error reading STEP file: {step_file_path}")
+        return None
+
+    step_reader.TransferRoots()
+    shape = step_reader.OneShape()
+
+    return shape
+
+def extract_all_shapes(shape):
+    """
+    从顶层shape中提取所有可处理的形状（Solid, Shell, Compound）
+
+    Args:
+        shape: OCC TopoDS_Shape对象
+
+    Returns:
+        shapes_list: 包含所有可处理形状的列表
+    """
+    shapes_list = []
+
+    # 尝试提取Solid
+    exp_solid = TopExp_Explorer(shape, TopAbs_SOLID)
+    while exp_solid.More():
+        solid = topods_Solid(exp_solid.Current())
+        try:
+            occwl_solid = Solid(solid)
+            shapes_list.append(('Solid', occwl_solid))
+        except Exception as e:
+            print(f"Warning: Failed to convert Solid: {e}")
+        exp_solid.Next()
+
+    # 如果没有Solid，尝试提取Shell
+    if len(shapes_list) == 0:
+        exp_shell = TopExp_Explorer(shape, TopAbs_SHELL)
+        while exp_shell.More():
+            shell = topods_Shell(exp_shell.Current())
+            try:
+                occwl_shell = Shell(shell)
+                shapes_list.append(('Shell', occwl_shell))
+            except Exception as e:
+                print(f"Warning: Failed to convert Shell: {e}")
+            exp_shell.Next()
+
+    # 如果还是没有，尝试将整个shape作为Compound处理
+    if len(shapes_list) == 0:
+        try:
+            occwl_compound = Compound(shape)
+            shapes_list.append(('Compound', occwl_compound))
+        except Exception as e:
+            print(f"Warning: Failed to convert Compound: {e}")
+
+    return shapes_list
+
 
 
 def parse_solid(solid: Solid) -> Union[dict, None]:

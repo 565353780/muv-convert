@@ -37,10 +37,13 @@ def real2bit(data, n_bits=8, min_range=-1, max_range=1):
 
 def update_mapping(data_dict):
     """
-    Remove unused key index from data dictionary.
+    移除未使用的索引键并重新映射
     """
     dict_new = {}
     mapping = {}
+    if len(data_dict) == 0:
+        return dict_new, mapping
+
     max_idx = max(data_dict.keys())
     skipped_indices = np.array(sorted(list(set(np.arange(max_idx)) - set(data_dict.keys()))))
     for idx, value in data_dict.items():
@@ -53,28 +56,26 @@ def update_mapping(data_dict):
 
 def face_edge_adj(shape: Union[Shell, Solid, Compound]):
     """
-    *** COPY AND MODIFIED FROM THE ORIGINAL OCCWL SOURCE CODE ***
-    Extract face/edge geometry and create a face-edge adjacency 
-    graph from the given shape (Solid or Compound)
+    从给定的shape中提取面/边几何信息并创建面-边邻接图
 
     Args:
-    - shape (Shell, Solid, or Compound): Shape
+        shape: Shell, Solid, 或 Compound对象
 
     Returns:
-    - face_dict: Dictionary of occwl faces, with face ID as the key
-    - edge_dict: Dictionary of occwl edges, with edge ID as the key
-    - edgeFace_IncM: Edge ID as the key, Adjacent faces ID as the value 
+        face_dict: 面字典，面ID作为键
+        edge_dict: 边字典，边ID作为键
+        edgeFace_IncM: 边-面关联矩阵，边ID作为键，相邻面ID作为值
     """
     assert isinstance(shape, (Shell, Solid, Compound))
     mapper = EntityMapper(shape)
 
-    ### Faces ###
+    ### 提取面 ###
     face_dict = {}
     for face in shape.faces():
         face_idx = mapper.face_index(face)
         face_dict[face_idx] = (face.surface_type(), face)
 
-    ### Edges and IncidenceMat ###
+    ### 提取边和关联矩阵 ###
     edgeFace_IncM = {}
     edge_dict = {}
     for edge in shape.edges():
@@ -96,9 +97,115 @@ def face_edge_adj(shape: Union[Shell, Solid, Compound]):
             else:
                 edgeFace_IncM[edge_idx] = [left_index, right_index]
         else:
-            pass # ignore seam
+            pass  # 忽略seam边
 
     return face_dict, edge_dict, edgeFace_IncM
+
+def extract_geometry_data(shape: Union[Shell, Solid, Compound], split_closed=True):
+    """
+    从shape中提取所有几何数据
+
+    Args:
+        shape: Shell, Solid, 或 Compound对象
+        split_closed: 是否分割闭合面和闭合边
+
+    Returns:
+        data: 包含所有导出数据的字典
+    """
+    assert isinstance(shape, (Shell, Solid, Compound))
+
+    # 分割闭合曲面和闭合曲线
+    if split_closed:
+        if isinstance(shape, Solid):
+            shape = shape.split_all_closed_faces(num_splits=0)
+            shape = shape.split_all_closed_edges(num_splits=0)
+        # Shell和Compound也支持类似操作
+        elif hasattr(shape, 'split_all_closed_faces'):
+            shape = shape.split_all_closed_faces(num_splits=0)
+            shape = shape.split_all_closed_edges(num_splits=0)
+
+    # 提取面、边几何和面-边邻接关系
+    face_dict, edge_dict, edgeFace_IncM = face_edge_adj(shape)
+
+    # 跳过未使用的索引键，并更新邻接关系
+    face_dict, face_map = update_mapping(face_dict)
+    edge_dict, edge_map = update_mapping(edge_dict)
+    edgeFace_IncM_update = {}
+    for key, value in edgeFace_IncM.items():
+        new_face_indices = [face_map[x] for x in value]
+        edgeFace_IncM_update[edge_map[key]] = new_face_indices
+    edgeFace_IncM = edgeFace_IncM_update
+
+    # 构建面-边邻接关系
+    num_faces = len(face_dict)
+    if len(edgeFace_IncM) > 0:
+        edgeFace_IncM_array = np.stack([x for x in edgeFace_IncM.values()])
+    else:
+        edgeFace_IncM_array = np.array([]).reshape(0, 2)
+
+    faceEdge_IncM = []
+    for surf_idx in range(num_faces):
+        if len(edgeFace_IncM_array) > 0:
+            surf_edges, _ = np.where(edgeFace_IncM_array == surf_idx)
+            faceEdge_IncM.append(surf_edges)
+        else:
+            faceEdge_IncM.append(np.array([]))
+
+    # 从曲面采样uv网格 (32x32)
+    graph_face_feat = {}
+    for face_idx, face_feature in face_dict.items():
+        _, face = face_feature
+        try:
+            points = uvgrid(face, method="point", num_u=32, num_v=32)
+            visibility_status = uvgrid(face, method="visibility_status", num_u=32, num_v=32)
+            mask = np.logical_or(visibility_status == 0, visibility_status == 2)  # 0: Inside, 1: Outside, 2: On boundary
+            # 沿通道方向拼接形成面特征张量
+            face_feat = np.concatenate((points, mask), axis=-1)
+            graph_face_feat[face_idx] = face_feat
+        except Exception as e:
+            print(f"Warning: Failed to sample face {face_idx}: {e}")
+            # 使用零填充
+            graph_face_feat[face_idx] = np.zeros((32, 32, 4))
+
+    if len(graph_face_feat) > 0:
+        face_pnts = np.stack([x for x in graph_face_feat.values()])[:, :, :, :3]
+    else:
+        face_pnts = np.array([]).reshape(0, 32, 32, 3)
+
+    # 从曲线采样u网格 (1x32)
+    graph_edge_feat = {}
+    graph_corner_feat = {}
+    for edge_idx, edge in edge_dict.items():
+        try:
+            points = ugrid(edge, method="point", num_u=32)
+            graph_edge_feat[edge_idx] = points
+            # 边的起始/终止顶点
+            v_start = points[0]
+            v_end = points[-1]
+            graph_corner_feat[edge_idx] = (v_start, v_end)
+        except Exception as e:
+            print(f"Warning: Failed to sample edge {edge_idx}: {e}")
+            # 使用零填充
+            graph_edge_feat[edge_idx] = np.zeros((32, 3))
+            graph_corner_feat[edge_idx] = (np.zeros(3), np.zeros(3))
+
+    if len(graph_edge_feat) > 0:
+        edge_pnts = np.stack([x for x in graph_edge_feat.values()])
+        edge_corner_pnts = np.stack([x for x in graph_corner_feat.values()])
+    else:
+        edge_pnts = np.array([]).reshape(0, 32, 3)
+        edge_corner_pnts = np.array([]).reshape(0, 2, 3)
+
+    data = {
+        'face_pnts': face_pnts,
+        'edge_pnts': edge_pnts,
+        'edge_corner_pnts': edge_corner_pnts,
+        'edgeFace_IncM': edgeFace_IncM_array,
+        'faceEdge_IncM': faceEdge_IncM,
+        'num_faces': num_faces,
+        'num_edges': len(edge_dict)
+    }
+    return data
 
 
 def extract_primitive(solid: Solid):
