@@ -9,7 +9,6 @@ from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.TopAbs import TopAbs_SOLID, TopAbs_SHELL
 from OCC.Core.TopoDS import topods_Solid, topods_Shell
 
-from muv_convert.Method.transform import normalize
 from muv_convert.Method.convert_utils import (
     get_bbox,
     extract_geometry_data,
@@ -85,81 +84,72 @@ def extract_all_shapes(shape):
     return shapes_list
 
 
-
 def parse_shape(shape_obj: Union[Shell, Solid, Compound], split_closed: bool = True) -> dict:
     """
+    从shape中提取原始几何数据，不进行归一化处理
+    
     Args:
-        shape: Shell, Solid, 或 Compound对象
+        shape_obj: Shell, Solid, 或 Compound对象
         split_closed: 是否分割闭合面和闭合边
 
     Returns:
         data: A dictionary containing all parsed data
+            - face_pnts: (N, 32, 32, 4) 面采样点和mask，前3维是xyz坐标，第4维是mask
+            - edge_pnts: (M, 32, 3) 边采样点
+            - edge_corner_pnts: (M, 2, 3) 边的起始和终止顶点
+            - edgeFace_IncM: (M, 2) 边-面邻接矩阵
+            - faceEdge_IncM: list of arrays，面-边邻接关系
+            - corner_unique: 去重后的顶点
+            - edgeCorner_IncM: 边-顶点邻接关系
     """
 
     data = extract_geometry_data(shape_obj, split_closed)
 
-    face_pnts = data['face_pnts']
-    edge_pnts = data['edge_pnts']
-    edge_corner_pnts = data['edge_corner_pnts']
+    face_pnts = data['face_pnts']  # (N, 32, 32, 4) - 包含xyz和mask
+    edge_pnts = data['edge_pnts']  # (M, 32, 3)
+    edge_corner_pnts = data['edge_corner_pnts']  # (M, 2, 3)
     edgeFace_IncM = data['edgeFace_IncM']
     faceEdge_IncM = data['faceEdge_IncM']
 
-    # Normalize the CAD model
-    surfs_wcs, edges_wcs, surfs_ncs, edges_ncs, corner_wcs = normalize(face_pnts, edge_pnts, edge_corner_pnts)
+    # 从face_pnts中提取坐标部分用于后续处理（前3个通道）
+    face_coords = face_pnts[:, :, :, :3] if face_pnts.size > 0 else face_pnts
 
     # Remove duplicate and merge corners
-    corner_wcs = np.round(corner_wcs,4)
+    corner_pnts = np.round(edge_corner_pnts, 4)
     corner_unique = []
-    for corner_pnt in corner_wcs.reshape(-1,3):
+    for corner_pnt in corner_pnts.reshape(-1, 3):
         if len(corner_unique) == 0:
-            corner_unique = corner_pnt.reshape(1,3)
+            corner_unique = corner_pnt.reshape(1, 3)
         else:
-            # Check if it exist or not
+            # Check if it exists or not
             exists = np.any(np.all(corner_unique == corner_pnt, axis=1))
-            if exists:
-                continue
-            else:
-                corner_unique = np.concatenate([corner_unique, corner_pnt.reshape(1,3)], 0)
-    corner_unique = np.asarray(corner_unique)
+            if not exists:
+                corner_unique = np.concatenate([corner_unique, corner_pnt.reshape(1, 3)], 0)
+    corner_unique = np.asarray(corner_unique) if len(corner_unique) > 0 else np.array([]).reshape(0, 3)
 
     # Edge-corner adjacency
     edgeCorner_IncM = []
-    for edge_corner in corner_wcs:
-        start_corner_idx = np.where((corner_unique == edge_corner[0]).all(axis=1))[0].item()
-        end_corner_idx = np.where((corner_unique == edge_corner[1]).all(axis=1))[0].item()
-        edgeCorner_IncM.append([start_corner_idx, end_corner_idx])
-    edgeCorner_IncM = np.array(edgeCorner_IncM)
-
-    # Surface global bbox
-    surf_bboxes = []
-    for pnts in surfs_wcs:
-        min_point, max_point = get_bbox(pnts.reshape(-1,3))
-        surf_bboxes.append( np.concatenate([min_point, max_point]))
-    surf_bboxes = np.vstack(surf_bboxes)
-
-    # Edge global bbox
-    edge_bboxes = []
-    for pnts in edges_wcs:
-        min_point, max_point = get_bbox(pnts.reshape(-1,3))
-        edge_bboxes.append(np.concatenate([min_point, max_point]))
-    edge_bboxes = np.vstack(edge_bboxes)
+    if corner_unique.size > 0 and corner_pnts.size > 0:
+        for edge_corner in corner_pnts:
+            start_corner_idx = np.where((corner_unique == edge_corner[0]).all(axis=1))[0].item()
+            end_corner_idx = np.where((corner_unique == edge_corner[1]).all(axis=1))[0].item()
+            edgeCorner_IncM.append([start_corner_idx, end_corner_idx])
+    edgeCorner_IncM = np.array(edgeCorner_IncM) if len(edgeCorner_IncM) > 0 else np.array([]).reshape(0, 2)
 
     # Convert to float32 to save space
-    data = {
-        'surf_gcs':face_pnts.astype(np.float32),
-        'edge_gcs':edge_pnts.astype(np.float32),
-        'corner_gcs':edge_corner_pnts.astype(np.float32),
-        'surf_wcs':surfs_wcs.astype(np.float32),
-        'edge_wcs':edges_wcs.astype(np.float32),
-        'surf_ncs':surfs_ncs.astype(np.float32),
-        'edge_ncs':edges_ncs.astype(np.float32),
-        'corner_wcs':corner_wcs.astype(np.float32),
+    result_data = {
+        # 原始几何数据（不归一化）
+        'face_pnts': face_pnts.astype(np.float32),  # (N, 32, 32, 4) 包含xyz和mask
+        'edge_pnts': edge_pnts.astype(np.float32),  # (M, 32, 3)
+        'edge_corner_pnts': edge_corner_pnts.astype(np.float32),  # (M, 2, 3)
+
+        # 邻接关系
         'edgeFace_adj': edgeFace_IncM,
-        'edgeCorner_adj':edgeCorner_IncM,
-        'faceEdge_adj':faceEdge_IncM,
-        'surf_bbox_wcs':surf_bboxes.astype(np.float32),
-        'edge_bbox_wcs':edge_bboxes.astype(np.float32),
-        'corner_unique':corner_unique.astype(np.float32),
+        'edgeCorner_adj': edgeCorner_IncM,
+        'faceEdge_adj': faceEdge_IncM,
+
+        # 顶点
+        'corner_unique': corner_unique.astype(np.float32),
     }
 
-    return data
+    return result_data

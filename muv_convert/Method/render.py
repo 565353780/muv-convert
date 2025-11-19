@@ -16,6 +16,8 @@ def vis_faces_edges(
     N = face_pnts.shape[0]
     M = edge_pnts.shape[0]
 
+    face_pnts = face_pnts[..., :3]
+
     # ---------------------
     # 1) visualize faces
     # ---------------------
@@ -98,14 +100,16 @@ def vis_faces_edges_list(shape_data_list):
         shape_type = shape_data.get('type', 'Unknown')
         data = shape_data['data']
 
-        face_pnts = data.get('surf_gcs', np.array([]))
-        edge_pnts = data.get('edge_gcs', np.array([]))
-        edge_corner_pnts = data.get('corner_gcs', np.array([]))
+        face_pnts = data.get('face_pnts', np.array([]))
+        edge_pnts = data.get('edge_pnts', np.array([]))
+        edge_corner_pnts = data.get('edge_corner_pnts', np.array([]))
 
         # 检查数据是否为空
         if face_pnts.size == 0 and edge_pnts.size == 0:
             print(f'[WARN] Shape {shape_idx} ({shape_type}) has no geometry data, skipping')
             continue
+
+        face_pnts = face_pnts[..., :3]
 
         N = face_pnts.shape[0] if face_pnts.size > 0 else 0
         M = edge_pnts.shape[0] if edge_pnts.size > 0 else 0

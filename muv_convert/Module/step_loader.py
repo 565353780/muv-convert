@@ -31,9 +31,9 @@ class StepLoader(object):
         return shape_data_list
 
     def renderCADData(self, shape_data: dict) -> bool:
-        face_pts = shape_data['data']['surf_gcs']
-        edge_pts = shape_data['data']['edge_gcs']
-        edge_corner_pts = shape_data['data']['corner_gcs']
+        face_pts = shape_data['data']['face_pnts']
+        edge_pts = shape_data['data']['edge_pnts']
+        edge_corner_pts = shape_data['data']['edge_corner_pnts']
 
         vis_faces_edges(
             face_pts,

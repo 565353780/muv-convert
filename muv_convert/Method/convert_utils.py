@@ -159,9 +159,9 @@ def extract_geometry_data(shape: Union[Shell, Solid, Compound], split_closed: bo
             graph_face_feat[face_idx] = np.zeros((32, 32, 4))
 
     if len(graph_face_feat) > 0:
-        face_pnts = np.stack([x for x in graph_face_feat.values()])[:, :, :, :3]
+        face_pnts = np.stack([x for x in graph_face_feat.values()])
     else:
-        face_pnts = np.array([]).reshape(0, 32, 32, 3)
+        face_pnts = np.array([]).reshape(0, 32, 32, 4)
 
     # 从曲线采样u网格 (1x32)
     graph_edge_feat = {}
@@ -193,7 +193,5 @@ def extract_geometry_data(shape: Union[Shell, Solid, Compound], split_closed: bo
         'edge_corner_pnts': edge_corner_pnts,
         'edgeFace_IncM': edgeFace_IncM_array,
         'faceEdge_IncM': faceEdge_IncM,
-        'num_faces': num_faces,
-        'num_edges': len(edge_dict)
     }
     return data
