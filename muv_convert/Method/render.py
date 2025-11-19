@@ -33,7 +33,7 @@ def vis_faces_edges(
             coords_flat = coords.reshape(-1, 3)
             valid_indices = mask_flat == 1
             pts = coords_flat[valid_indices]
-            
+
             # 如果没有有效点，跳过这个face
             if pts.shape[0] == 0:
                 continue

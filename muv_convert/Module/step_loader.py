@@ -33,7 +33,7 @@ class StepLoader(object):
     def renderCADData(self, shape_data: dict) -> bool:
         """
         可视化单个形状数据
-        
+
         Args:
             shape_data: 形状数据字典，包含 'type' 和 'data' 字段
                        data中包含 'face_pnts' (N,32,32,4或3)

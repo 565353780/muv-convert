@@ -30,8 +30,6 @@ class MUVConvertor(StepLoader):
 
         createFileFolder(save_pkl_file_path)
 
-        for i, cad_data in enumerate(cad_data_list):
-            curr_save_pkl_file_path = save_pkl_file_path[:-4] + '_' + str(i) + '.pkl'
-            with open(curr_save_pkl_file_path, "wb") as tf:
-                pickle.dump(cad_data, tf)
+        with open(save_pkl_file_path, "wb") as tf:
+            pickle.dump(cad_data_list, tf)
         return True

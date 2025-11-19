@@ -13,6 +13,8 @@ def demo():
 
     step_loader.renderCADDataList(shape_data_list)
 
+    '''
     for shape_data in shape_data_list:
         step_loader.renderCADData(shape_data)
+    '''
     return True
