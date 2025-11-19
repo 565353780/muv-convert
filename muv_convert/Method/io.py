@@ -87,7 +87,7 @@ def extract_all_shapes(shape):
 def parse_shape(shape_obj: Union[Shell, Solid, Compound], split_closed: bool = True) -> dict:
     """
     从shape中提取原始几何数据，不进行归一化处理
-    
+
     Args:
         shape_obj: Shell, Solid, 或 Compound对象
         split_closed: 是否分割闭合面和闭合边
@@ -110,9 +110,6 @@ def parse_shape(shape_obj: Union[Shell, Solid, Compound], split_closed: bool = T
     edge_corner_pnts = data['edge_corner_pnts']  # (M, 2, 3)
     edgeFace_IncM = data['edgeFace_IncM']
     faceEdge_IncM = data['faceEdge_IncM']
-
-    # 从face_pnts中提取坐标部分用于后续处理（前3个通道）
-    face_coords = face_pnts[:, :, :, :3] if face_pnts.size > 0 else face_pnts
 
     # Remove duplicate and merge corners
     corner_pnts = np.round(edge_corner_pnts, 4)
